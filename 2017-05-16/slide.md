@@ -1,9 +1,11 @@
 slidenumbers: true
 autoscale: true
+theme: Simple, 1
 
-# Lambdaと上手に付き合う
-## クラスメソッドのMEETUP
-### 〜プログラミングが好きだ！Python、Java、Ruby、Swiftをやってるエンジニア達が語るAWSどっぷりな会社での働き方〜
+# [fit] Lambdaと上手に付き合う
+
+### クラスメソッドのMEETUP
+#### 〜プログラミングが好きだ！Python、Java、Ruby、Swiftをやってるエンジニア達が語るAWSどっぷりな会社での働き方〜
 ### 2017/05/16 中山 幸治
 
 ---
@@ -22,11 +24,17 @@ autoscale: true
 ---
 # アジェンダ
 
-1. AWS Lambdaって何(3分)
-1. AWS Serverless Application Modelって何(3分)
-1. ソースコードはどうやって管理すべきか(3分)
-1. Dockerと組み合わせる(3分)
+1. AWS Lambdaって何(1分)
+1. AWS Serverless Application Modelって何(4分)
+1. ソースコードはどうやって管理すべきか(4分)
+1. Dockerと組み合わせる(4分)
 1. まとめ(1分)
+
+---
+# 最近Node.jsお勉強中なのでそれを前提にしています<br/>(タイトルに入ってないですが…)
+
+---
+# あと多分時間足らない
 
 ---
 # 1. Lambdaって何
@@ -44,6 +52,12 @@ autoscale: true
 - 現時点で公式サポートしている言語はNode.js/Python/Java/C#
   - → やろうと思えば別言語も実行可能
 - Lambdaを中心としたシステムをサーバレスアーキテクチャと呼ぶ
+  - → イベントドリブンに各種処理が実行されるという特徴がある
+
+---
+# イベントドリブンの例
+
+![inline](images/event.png)
 
 ---
 # Lambdaのサンプル
@@ -70,13 +84,14 @@ module.exports.handler = (event, context, callback) => {
 ![200%](images/sam.jpg)
 
 - サーバレスアーキテクチャを管理するためのモデル
-- 略してAWS SAMと呼ばれることが多い
-- LambdaなどのAWSサービスをコードで管理可能
-  - → Gitで管理可能
-  - → GitHubと連携してCI/CDパイプラインを作れる
+  - 略してAWS SAMと呼ばれることが多い
+- LambdaなどのAWSサービスを宣言的なコードとして管理可能
+  - → アーキテクチャ全体をコードで管理できる
+  - → Git/GitHubと連携してCI/CDパイプラインを作れる
 - 実態はCloudFormationの拡張機能
   - → 学習コストが低い
-- デプロイなどにはAWS CLIを利用する
+- ローカルのソースコードからデプロイメントパッケージの作成/アップロードを自動化
+- 専用のコマンドは用意されてないのでAWS CLIを利用する
 
 ---
 # AWS Serverless Application Modelのサンプル
@@ -84,32 +99,28 @@ module.exports.handler = (event, context, callback) => {
 ```yaml
 ---
 AWSTemplateFormatVersion: 2010-09-09
-Transform: AWS::Serverless-2016-10-31
+Transform: AWS::Serverless-2016-10-31 # AWS SAMを利用することを明示的に指定
 Description: Hello Lambda
 
 Resources:
   Func1:
-    Type: AWS::Serverless::Function
+    Type: AWS::Serverless::Function # Lambda用リソースの定義
     Properties:
-      CodeUri: src/handlers/func1
-      Handler: index.handler
-      Runtime: nodejs6.10
-
-Outputs:
-  Func1Name:
-    Value: !Ref Func1
+      CodeUri: src/handlers/func1 # ソースコードを含むディレクトリへのパス
+      Handler: index.handler # ハンドラの指定(<ファイル名>.<関数名>)
+      Runtime: nodejs6.10 # ランタイムの指定
 ```
 
 ---
 # AWS Serverless Application Modelのデプロイ
 
 ```bash
-# LambdaのコードなどをS3にアップロード
+# LambdaのコードなどをS3にアップロード(同時にテンプレートの変換)
 $ aws cloudformation package \
   --template-file sam.yml \
   --s3-bucket <_YOUR_S3_BUCKET_> \
   --output-template-file .sam/packaged.yml \
-# デプロイ
+# デプロイ(スタック/change setの作成/更新)
 $ aws cloudformation deploy \
   --template-file .sam/packaged.yml \
   --stack-name <_YOUR_STACK_NAME_> \
@@ -120,50 +131,58 @@ $ aws cloudformation deploy \
 # 3. ソースコードはどうやって管理すべきか
 
 ---
-# ソースコードを管理する際の考え方
+# AWS SAMでソースコードを管理する際の考え
 
-- Lambdaのデプロイメントパッケージは必要なもののみ含める
+- デプロイメントパッケージは最小にする
   - → Lambdaの起動時間を短縮するため
-  - AWS SAMはパッケージのinclude/excludeが弱いのでテストコードも分離
+  - → AWS SAMはデプロイメントパッケージのinclude/excludeが弱いのでテストコードも分離
+- 環境(開発/ステージング/本番)毎の差分を管理できるようにする
+  - → `params` 以下に環境毎にパラメータを含んだ設定ファイルを用意
+  - → `aws cloudformation deploy` の `--parameter-overrides` で環境毎のパラメータを吸収
+
+---
+# AWS SAMでソースコードを管理する際の考え
+
 - リポジトリに全ての情報を含める
-  - → The twelve-factor app
-- AWS SAMは専用のコマンドが用意されてないのでAWS CLIのラッパースクリプトで頑張る
-  - `bin` 以下に配置して `package.json` などから呼び出す
-- `aws cloudformation deploy` の `--parameter-overrides` で環境毎のパラメータを分離
+  - → `package.json` に必要なモジュールを全て入れる
+  - → AWS CLIのラッパースクリプトを用意しておく
+  - → ラッパースクリプトは直接実行させない(全て `npm` コマンド経由)
+  - → `bin` 以下に配置して `package.json` の `scripts` から呼び出す
 
 ---
 # これだ！
 
 ```bash
 .
-├── .eslintrc # Lint
-├── .gitignore # node_modulesなどを除外
-├── .sam # パッケージ化されたAWS SAMテンプレート
+├── .sam # パッケージ化されたAWS SAMテンプレート(.gitignoreで除外)
 │   └── packaged-dev.yml
-├── bin # package.jsonのscriptから呼び出すシェルスクリプト
+├── bin # package.jsonのscriptsから呼び出すラッパースクリプト
 │   └── deploy.sh
-├── package.json # 必要なモジュールを管理
-├── params # 環境毎のパラメータ
+├── package.json # 必要なモジュールとラッパースクリプトの管理
+├── params # 環境毎のパラメータ(ファイル形式は何でもよい)
 │   └── param.dev.json
 ├── requirements.txt # AWS CLIもバージョン管理する
+├── sam.yml # AWS SAMのテンプレート
 ```
 
 ---
 # こうだ！
 
 ```bash
-├── sam.yml # AWS SAMのテンプレート
-├── src # ソースコードなどを配置
-│   ├── api # API Gateway用Swaggerファイル
+├── src # Lambda/API Gatewayなどのファイルを配置
+│   ├── api # API Gateway用Swaggerファイル(使う場合)
 │   │   └── swagger.yml
-│   └── handlers # Lambdaのコード
-│       └── func1
-│           ├── index.js # Lambdaのコード
-│           ├── lib
-│           │   └── func1.class.js # テストしやすくするためにクラス化してLambda本体とは分離
-│           └── package.json # 非標準モジュールを使う場合
+│   └── handlers # Lambdaのコードを設置
+│       ├── func1 # デプロイメントパッケージ含ませるディレクトリ
+│       │   ├── index.js # Lambdaのコード
+│       │   ├── lib
+│       │   │   └── func1.class.js # Lambdaの主要な機能はライブラリとして切り出す(テストしやすくする)
+│       │   └── package.json # 非標準モジュールを使う場合(Lambda毎に作成する)
+│       └── func2 # 別のLambda関数
+│           └── index.js
 └── test # テストコード
-    └── func1.spec.js
+    ├── func1.spec.js
+    └── func2.spec.js
 ```
 
 ---
@@ -173,15 +192,17 @@ $ aws cloudformation deploy \
 # Dockerと組み合わせると嬉しいこと
 
 - Lambdaの実態はAmazon Linuxベースのコンテナ
-- 開発環境にMacを利用している場合にモジュールが動かない場合あり
-  - → コンパイルが必要なモジュールの場合
-  - → 画像処理ライブラリとか
-- Amazon LinuxのDockerイメージ使えば簡単にモジュールをインストール可能
-  - → コンテナのボリュームを `node_modules` にマウントしてローカルにインストールする
-- とはいえ、CI/CDでパッケージインストールする仕組みであれば別にいらないかも
-  - → あくまで開発環境で利用する
+- 開発環境にMacを利用している場合にモジュールが動かない場合がある
+  - → Node.jsのNative Addonとか
+- Amazon LinuxのDockerイメージ経由でモジュールをインストールする
+  - → `Dockerfile` でNode.jsとモジュールをインストール
+  - → `docker run` の `-v` オプションで `node_modules` をローカルにマウント
+- 本来はCI/CD環境上でパッケージインストールする仕組みを作るべき
+  - → あくまでローカルの開発環境で利用する
 
 ---
+[.footer: https://github.com/awslabs/serverless-image-resizing/blob/master/Dockerfile]
+
 # Dockerfile
 
 ```docker
@@ -192,9 +213,11 @@ ADD package.json /tmp
 
 WORKDIR /tmp
 
+# Nodeのインストール
 RUN yum -y install gcc-c++ && \
     rpm --import /etc/nodesource.gpg.key && \
-    curl --location --output ns.rpm https://rpm.nodesource.com/pub_6.x/el/7/x86_64/nodejs-6.10.1-1nodesource.el7.centos.x86_64.rpm && \
+    curl --location --output \
+      ns.rpm https://rpm.nodesource.com/pub_6.x/el/7/x86_64/nodejs-6.10.1-1nodesource.el7.centos.x86_64.rpm && \
     rpm --checksig ns.rpm && \
     rpm --install --force ns.rpm && \
     npm install -g npm@latest && \
@@ -202,6 +225,7 @@ RUN yum -y install gcc-c++ && \
     yum clean all && \
     rm --force ns.rpm
 
+# docker runしたときにpackage.jsonで指定したモジュールをインストールする
 ENTRYPOINT npm install --production
 ```
 
@@ -211,11 +235,12 @@ ENTRYPOINT npm install --production
 ```bash
 # ECRの認証情報取得
 $ aws ecr get-login
-# ECRにログインしてpull/pushできるようにする
-$ docker login -u AWS https://<_YOUR_AWS_ACCOUNT_ID_>.dkr.ecr.ap-northeast-1.amazonaws.com
+# ECRにログインしてAmazon LinuxのDockerイメージをpull/pushできるようにする
+$ docker login -u AWS \
+  https://<_YOUR_AWS_ACCOUNT_ID_>.dkr.ecr.<_YOUR_AWS_REGION_>.amazonaws.com
 # イメージのビルド
 $ docker build -t amazonlinux:nodejs .
-# コンテナの実行
+# コンテナの実行(コンテナのnode_modulesをローカルにマウントする)
 $ docker run --rm -v $PWD/node_modules:/tmp/node_modules amazonlinux:nodejs
 ```
 
